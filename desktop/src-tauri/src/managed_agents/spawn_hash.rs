@@ -32,6 +32,7 @@ use super::{
     known_acp_runtime, normalize_agent_args,
     persona_events::preview_prospective_persona_snapshot,
     resolve_effective_agent_env,
+    runtime::{resolve_session_title, SESSION_TITLE_ENV_VAR},
     types::{AgentDefinition, ManagedAgentRecord, TeamRecord},
     GlobalAgentConfig,
 };
@@ -112,6 +113,16 @@ pub(crate) fn spawn_config_hash(
     resolved_prompt.hash(&mut hasher);
     resolved_model.hash(&mut hasher);
     resolved_provider.hash(&mut hasher);
+    // Session title: the same resolve `spawn_agent_child` performs for its env
+    // write, so a rename raises the restart badge. Skipped when a user env
+    // override shadows it — spawn writes the title BEFORE the user env layer,
+    // so the override is what actually runs, and it already reaches this hash
+    // through `effective.env` above. Hashing the record-derived value under an
+    // override would badge a rename that changes nothing.
+    let effective_session_title = (!effective.env.contains_key(SESSION_TITLE_ENV_VAR))
+        .then(|| resolve_session_title(record.display_name.as_deref(), &record.name))
+        .flatten();
+    effective_session_title.hash(&mut hasher);
     record.auth_tag.hash(&mut hasher);
     record.respond_to.as_str().hash(&mut hasher);
     // The allowlist is hashed as the env receives it: spawn sets
