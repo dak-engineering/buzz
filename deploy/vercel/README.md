@@ -60,7 +60,11 @@ Buzz already exposes canonical environment variables for every deployment
 setting, so Vercel support does not require changes to the Rust application.
 [`entrypoint.sh`](entrypoint.sh) performs the deployment-boundary translation:
 
-- `PORT` to `BUZZ_BIND_ADDR`, with non-conflicting private health/metrics ports;
+- an immediate `$PORT` TCP listener forwarding to Buzz on a private,
+  non-conflicting port, holding cold-start connections while Buzz completes
+  storage admission so it can exceed Vercel's startup deadline without
+  changing the relay;
+- non-conflicting private health and metrics ports;
 - Upstash `KV_URL` to `REDIS_URL`;
 - Vercel's deployment host to `RELAY_URL` and `BUZZ_MEDIA_BASE_URL`; and
 - explicit Vercel defaults for `BUZZ_AUTO_MIGRATE`,

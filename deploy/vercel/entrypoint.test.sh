@@ -6,7 +6,7 @@ entrypoint="$script_dir/entrypoint.sh"
 
 run_entrypoint() {
     sed 's|exec /usr/local/bin/buzz-relay "$@"|env|' "$entrypoint" |
-        env -i PATH="${PATH:-/usr/bin:/bin}" "$@" sh
+        env -i PATH="${PATH:-/usr/bin:/bin}" BUZZ_VERCEL_TEST_NO_PROXY=1 "$@" sh
 }
 
 assert_has() {
@@ -41,7 +41,7 @@ base_output=$(
         BUZZ_RELAY_PRIVATE_KEY=test-relay-key \
         BUZZ_GIT_HOOK_HMAC_SECRET=test-hook-key
 )
-assert_has "$base_output" "BUZZ_BIND_ADDR=0.0.0.0:80"
+assert_has "$base_output" "BUZZ_BIND_ADDR=127.0.0.1:3000"
 assert_has "$base_output" "BUZZ_HEALTH_PORT=8080"
 assert_has "$base_output" "BUZZ_METRICS_PORT=9102"
 assert_has "$base_output" "REDIS_URL=rediss://marketplace"
@@ -65,9 +65,26 @@ collision_output=$(
         BUZZ_RELAY_PRIVATE_KEY=test-relay-key \
         BUZZ_GIT_HOOK_HMAC_SECRET=test-hook-key
 )
-assert_has "$collision_output" "BUZZ_BIND_ADDR=0.0.0.0:8080"
+assert_has "$collision_output" "BUZZ_BIND_ADDR=127.0.0.1:3000"
 assert_has "$collision_output" "BUZZ_HEALTH_PORT=8081"
 assert_has "$collision_output" "BUZZ_METRICS_PORT=9102"
+
+port_3000_output=$(
+    run_entrypoint \
+        VERCEL=1 \
+        VERCEL_URL=buzz-preview.vercel.app \
+        PORT=3000 \
+        DATABASE_URL=postgresql://test \
+        KV_URL=rediss://marketplace \
+        BUZZ_S3_ACCESS_KEY=test-access \
+        BUZZ_S3_SECRET_KEY=test-secret \
+        BUZZ_S3_BUCKET=test-bucket \
+        BUZZ_RELAY_PRIVATE_KEY=test-relay-key \
+        BUZZ_GIT_HOOK_HMAC_SECRET=test-hook-key
+)
+assert_has "$port_3000_output" "BUZZ_BIND_ADDR=127.0.0.1:3001"
+assert_has "$port_3000_output" "BUZZ_HEALTH_PORT=8080"
+assert_has "$port_3000_output" "BUZZ_METRICS_PORT=9102"
 
 override_output=$(
     run_entrypoint \

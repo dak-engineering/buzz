@@ -4,6 +4,13 @@
 # the published, multi-architecture Buzz relay image.
 FROM ghcr.io/block/buzz@sha256:a0f67203d71d15d237fa7517788799957c30c8acdb81cbcff711e07e951c2710
 
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libcap2-bin socat \
+    && setcap cap_net_bind_service=+ep /usr/bin/socat \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --chmod=0755 deploy/vercel/entrypoint.sh /usr/local/bin/buzz-vercel-entrypoint
 
+USER buzz:buzz
 ENTRYPOINT ["/usr/local/bin/buzz-vercel-entrypoint"]
