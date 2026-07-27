@@ -1,0 +1,9 @@
+# syntax=docker/dockerfile:1.7
+
+# Keep the Vercel deployment additive: layer only its environment adapter onto
+# the published, multi-architecture Buzz relay image.
+FROM ghcr.io/block/buzz@sha256:a0f67203d71d15d237fa7517788799957c30c8acdb81cbcff711e07e951c2710
+
+COPY --chmod=0755 deploy/vercel/entrypoint.sh /usr/local/bin/buzz-vercel-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/buzz-vercel-entrypoint"]
