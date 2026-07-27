@@ -380,35 +380,6 @@ fn parse_optional_bool(name: &str) -> Result<bool, ConfigError> {
     parse_bool(name, false)
 }
 
-fn first_nonempty_env(names: &[&str]) -> Option<String> {
-    names.iter().find_map(|name| {
-        std::env::var(name)
-            .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-    })
-}
-
-fn select_vercel_public_host(
-    environment: Option<&str>,
-    production_host: Option<String>,
-    deployment_host: Option<String>,
-) -> Option<String> {
-    if environment == Some("production") {
-        production_host.or(deployment_host)
-    } else {
-        deployment_host.or(production_host)
-    }
-}
-
-fn vercel_public_host() -> Option<String> {
-    select_vercel_public_host(
-        std::env::var("VERCEL_ENV").ok().as_deref(),
-        first_nonempty_env(&["VERCEL_PROJECT_PRODUCTION_URL"]),
-        first_nonempty_env(&["VERCEL_URL"]),
-    )
-}
-
 fn ensure_git_repo_path(
     raw: impl Into<std::path::PathBuf>,
 ) -> Result<std::path::PathBuf, ConfigError> {
@@ -432,9 +403,8 @@ fn ensure_git_path(
 impl Config {
     /// Loads configuration from environment variables, falling back to development defaults.
     pub fn from_env() -> Result<Self, ConfigError> {
-        let bind_addr_raw = first_nonempty_env(&["BUZZ_BIND_ADDR"])
-            .or_else(|| first_nonempty_env(&["PORT"]).map(|port| format!("0.0.0.0:{port}")))
-            .unwrap_or_else(|| "0.0.0.0:3000".to_string());
+        let bind_addr_raw =
+            std::env::var("BUZZ_BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
         let bind_addr = parse_bind_addr(&bind_addr_raw)?;
 
         let database_url = std::env::var("DATABASE_URL")
@@ -445,8 +415,8 @@ impl Config {
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty());
 
-        let redis_url = first_nonempty_env(&["REDIS_URL", "KV_URL"])
-            .unwrap_or_else(|| "redis://localhost:6379".to_string());
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
         let redis_pool_size = std::env::var("BUZZ_REDIS_POOL_SIZE")
             .ok()
@@ -454,9 +424,8 @@ impl Config {
             .filter(|&v| v > 0)
             .unwrap_or(16);
 
-        let relay_url = first_nonempty_env(&["RELAY_URL"])
-            .or_else(|| vercel_public_host().map(|host| format!("wss://{host}")))
-            .unwrap_or_else(|| "ws://localhost:3000".to_string());
+        let relay_url =
+            std::env::var("RELAY_URL").unwrap_or_else(|_| "ws://localhost:3000".to_string());
 
         let pairing_relay_url = std::env::var("BUZZ_PAIRING_RELAY_URL")
             .ok()
@@ -519,7 +488,7 @@ impl Config {
         // horizontally-scaled deployment sets this false; see the field doc.
         let huddle_audio_available = std::env::var("BUZZ_HUDDLE_AUDIO_AVAILABLE")
             .map(|v| !(v == "false" || v == "0"))
-            .unwrap_or_else(|_| std::env::var("VERCEL").as_deref() != Ok("1"));
+            .unwrap_or(true);
 
         // Mesh opt-in: default OFF. Strict rollout no-regression — an image
         // upgrade with untouched env must not bind a new UDP port or write a
@@ -647,41 +616,17 @@ impl Config {
             .and_then(|v| v.parse().ok())
             .unwrap_or(9102);
 
-        let tigris_configured = first_nonempty_env(&[
-            "TIGRIS_STORAGE_ACCESS_KEY_ID",
-            "TIGRIS_STORAGE_SECRET_ACCESS_KEY",
-            "TIGRIS_STORAGE_BUCKET",
-        ])
-        .is_some();
-        let s3_region = first_nonempty_env(&["BUZZ_S3_REGION"]).unwrap_or_else(|| {
-            if tigris_configured {
-                "auto".to_string()
-            } else {
-                first_nonempty_env(&["AWS_REGION"]).unwrap_or_else(|| "us-east-1".to_string())
-            }
-        });
         let media = buzz_media::MediaConfig {
-            s3_endpoint: first_nonempty_env(&["BUZZ_S3_ENDPOINT", "TIGRIS_STORAGE_ENDPOINT"])
-                .unwrap_or_else(|| {
-                    if tigris_configured {
-                        "https://t3.storage.dev".to_string()
-                    } else {
-                        "http://localhost:9000".to_string()
-                    }
-                }),
-            s3_access_key: first_nonempty_env(&[
-                "BUZZ_S3_ACCESS_KEY",
-                "TIGRIS_STORAGE_ACCESS_KEY_ID",
-            ])
-            .unwrap_or_else(|| "buzz_dev".to_string()),
-            s3_secret_key: first_nonempty_env(&[
-                "BUZZ_S3_SECRET_KEY",
-                "TIGRIS_STORAGE_SECRET_ACCESS_KEY",
-            ])
-            .unwrap_or_else(|| "buzz_dev_secret".to_string()),
-            s3_bucket: first_nonempty_env(&["BUZZ_S3_BUCKET", "TIGRIS_STORAGE_BUCKET"])
-                .unwrap_or_else(|| "buzz-media".to_string()),
-            s3_region,
+            s3_endpoint: std::env::var("BUZZ_S3_ENDPOINT")
+                .unwrap_or_else(|_| "http://localhost:9000".to_string()),
+            s3_access_key: std::env::var("BUZZ_S3_ACCESS_KEY")
+                .unwrap_or_else(|_| "buzz_dev".to_string()),
+            s3_secret_key: std::env::var("BUZZ_S3_SECRET_KEY")
+                .unwrap_or_else(|_| "buzz_dev_secret".to_string()),
+            s3_bucket: std::env::var("BUZZ_S3_BUCKET").unwrap_or_else(|_| "buzz-media".to_string()),
+            s3_region: std::env::var("BUZZ_S3_REGION")
+                .or_else(|_| std::env::var("AWS_REGION"))
+                .unwrap_or_else(|_| "us-east-1".to_string()),
             max_image_bytes: std::env::var("BUZZ_MAX_IMAGE_BYTES")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -698,9 +643,8 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(100 * 1024 * 1024),
-            public_base_url: first_nonempty_env(&["BUZZ_MEDIA_BASE_URL"])
-                .or_else(|| vercel_public_host().map(|host| format!("https://{host}/media")))
-                .unwrap_or_else(|| "http://localhost:3000/media".to_string()),
+            public_base_url: std::env::var("BUZZ_MEDIA_BASE_URL")
+                .unwrap_or_else(|_| "http://localhost:3000/media".to_string()),
             // Per-upload-event records (`_uploads/` moderation side channel).
             // Off by default; coherence between the three knobs is enforced in
             // MediaConfig::validate at startup.
@@ -989,98 +933,6 @@ mod tests {
     // Parallel env-var mutation causes `defaults_are_valid` to see the invalid
     // value set by `invalid_bind_addr_returns_error`, causing a flaky failure.
     static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-    #[test]
-    fn vercel_host_selection_prefers_the_canonical_production_host() {
-        assert_eq!(
-            select_vercel_public_host(
-                Some("production"),
-                Some("buzz.example".to_string()),
-                Some("buzz-abc.vercel.app".to_string()),
-            )
-            .as_deref(),
-            Some("buzz.example")
-        );
-        assert_eq!(
-            select_vercel_public_host(
-                Some("preview"),
-                Some("buzz.example".to_string()),
-                Some("buzz-git-feature.vercel.app".to_string()),
-            )
-            .as_deref(),
-            Some("buzz-git-feature.vercel.app")
-        );
-    }
-
-    #[test]
-    fn vercel_and_marketplace_environment_aliases_are_resolved() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        let names = [
-            "BUZZ_BIND_ADDR",
-            "PORT",
-            "REDIS_URL",
-            "KV_URL",
-            "RELAY_URL",
-            "BUZZ_MEDIA_BASE_URL",
-            "BUZZ_S3_ENDPOINT",
-            "BUZZ_S3_ACCESS_KEY",
-            "BUZZ_S3_SECRET_KEY",
-            "BUZZ_S3_BUCKET",
-            "BUZZ_S3_REGION",
-            "TIGRIS_STORAGE_ENDPOINT",
-            "TIGRIS_STORAGE_ACCESS_KEY_ID",
-            "TIGRIS_STORAGE_SECRET_ACCESS_KEY",
-            "TIGRIS_STORAGE_BUCKET",
-            "VERCEL",
-            "VERCEL_ENV",
-            "VERCEL_URL",
-            "VERCEL_PROJECT_PRODUCTION_URL",
-        ];
-        let previous: Vec<_> = names
-            .iter()
-            .map(|name| (*name, std::env::var_os(name)))
-            .collect();
-        for name in names {
-            std::env::remove_var(name);
-        }
-
-        std::env::set_var("PORT", "8088");
-        std::env::set_var("KV_URL", "rediss://default:secret@redis.example:6379");
-        std::env::set_var("TIGRIS_STORAGE_ACCESS_KEY_ID", "tid_test");
-        std::env::set_var("TIGRIS_STORAGE_SECRET_ACCESS_KEY", "tsec_test");
-        std::env::set_var("TIGRIS_STORAGE_BUCKET", "buzz-test");
-        std::env::set_var("VERCEL", "1");
-        std::env::set_var("VERCEL_ENV", "preview");
-        std::env::set_var("VERCEL_URL", "buzz-preview.vercel.app");
-        std::env::set_var("VERCEL_PROJECT_PRODUCTION_URL", "buzz.vercel.app");
-
-        let config = Config::from_env().expect("Vercel config");
-
-        for (name, value) in previous {
-            if let Some(value) = value {
-                std::env::set_var(name, value);
-            } else {
-                std::env::remove_var(name);
-            }
-        }
-
-        assert_eq!(config.bind_addr, "0.0.0.0:8088".parse().unwrap());
-        assert_eq!(
-            config.redis_url,
-            "rediss://default:secret@redis.example:6379"
-        );
-        assert_eq!(config.relay_url, "wss://buzz-preview.vercel.app");
-        assert_eq!(
-            config.media.public_base_url,
-            "https://buzz-preview.vercel.app/media"
-        );
-        assert_eq!(config.media.s3_endpoint, "https://t3.storage.dev");
-        assert_eq!(config.media.s3_access_key, "tid_test");
-        assert_eq!(config.media.s3_secret_key, "tsec_test");
-        assert_eq!(config.media.s3_bucket, "buzz-test");
-        assert_eq!(config.media.s3_region, "auto");
-        assert!(!config.huddle_audio_available);
-    }
 
     #[test]
     fn defaults_are_valid() {

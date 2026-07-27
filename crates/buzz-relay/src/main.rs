@@ -22,10 +22,10 @@ use buzz_relay::telemetry;
 use buzz_workflow::WorkflowEngine;
 use tokio_util::sync::CancellationToken;
 
-fn buzz_auto_migrate_enabled(value: Option<&str>, is_vercel: bool) -> bool {
-    value.map_or(is_vercel, |value| {
+fn buzz_auto_migrate_enabled(value: Option<&str>) -> bool {
+    value.map(str::trim).is_some_and(|value| {
         matches!(
-            value.trim().to_ascii_lowercase().as_str(),
+            value.to_ascii_lowercase().as_str(),
             "true" | "1" | "yes" | "on"
         )
     })
@@ -158,10 +158,8 @@ async fn main() -> anyhow::Result<()> {
         info!("Postgres connected");
     }
 
-    let auto_migrate = buzz_auto_migrate_enabled(
-        std::env::var("BUZZ_AUTO_MIGRATE").ok().as_deref(),
-        std::env::var("VERCEL").as_deref() == Ok("1"),
-    );
+    let auto_migrate =
+        buzz_auto_migrate_enabled(std::env::var("BUZZ_AUTO_MIGRATE").ok().as_deref());
     if auto_migrate {
         db.migrate().await.map_err(|e| {
             error!("Failed to run database migrations: {e}");
@@ -1854,18 +1852,17 @@ mod tests {
 
     #[test]
     fn buzz_auto_migrate_is_opt_in() {
-        assert!(!buzz_auto_migrate_enabled(None, false));
-        assert!(buzz_auto_migrate_enabled(None, true));
-        assert!(!buzz_auto_migrate_enabled(Some(""), true));
-        assert!(!buzz_auto_migrate_enabled(Some("false"), true));
-        assert!(!buzz_auto_migrate_enabled(Some("0"), true));
-        assert!(!buzz_auto_migrate_enabled(Some("no"), true));
+        assert!(!buzz_auto_migrate_enabled(None));
+        assert!(!buzz_auto_migrate_enabled(Some("")));
+        assert!(!buzz_auto_migrate_enabled(Some("false")));
+        assert!(!buzz_auto_migrate_enabled(Some("0")));
+        assert!(!buzz_auto_migrate_enabled(Some("no")));
 
-        assert!(buzz_auto_migrate_enabled(Some("true"), false));
-        assert!(buzz_auto_migrate_enabled(Some("TRUE"), false));
-        assert!(buzz_auto_migrate_enabled(Some(" 1 "), false));
-        assert!(buzz_auto_migrate_enabled(Some("yes"), false));
-        assert!(buzz_auto_migrate_enabled(Some("on"), false));
+        assert!(buzz_auto_migrate_enabled(Some("true")));
+        assert!(buzz_auto_migrate_enabled(Some("TRUE")));
+        assert!(buzz_auto_migrate_enabled(Some(" 1 ")));
+        assert!(buzz_auto_migrate_enabled(Some("yes")));
+        assert!(buzz_auto_migrate_enabled(Some("on")));
     }
 
     #[test]

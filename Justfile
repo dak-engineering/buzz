@@ -92,7 +92,7 @@ build-release:
     cargo build --workspace --release
 
 # Run repo lint and formatting checks
-check: fmt-check clippy desktop-check desktop-tauri-fmt-check desktop-tauri-clippy web-check mobile-check
+check: fmt-check clippy desktop-check desktop-tauri-fmt-check desktop-tauri-clippy web-check mobile-check vercel-entrypoint-test
 
 # Format all Rust code
 fmt:
@@ -101,6 +101,10 @@ fmt:
 # Check formatting without modifying files
 fmt-check:
     cargo fmt --all -- --check
+
+# Verify the Vercel container adapter without starting external services
+vercel-entrypoint-test:
+    sh deploy/vercel/entrypoint.test.sh
 
 # Run clippy with warnings as errors
 clippy:
