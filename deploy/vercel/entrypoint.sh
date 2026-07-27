@@ -24,17 +24,33 @@ if [ "${VERCEL:-}" = "1" ]; then
     fi
 
     if [ "${BUZZ_BIND_ADDR+x}" != "x" ]; then
-        export BUZZ_BIND_ADDR="0.0.0.0:$PORT"
+        relay_port=3000
+        if [ "$PORT" -eq "$relay_port" ]; then
+            relay_port=3001
+        fi
+        export BUZZ_BIND_ADDR="127.0.0.1:$relay_port"
+    else
+        relay_port=${BUZZ_BIND_ADDR##*:}
+        case "$relay_port" in
+            "" | *[!0-9]*)
+                echo "buzz-vercel-entrypoint: BUZZ_BIND_ADDR must end in a numeric TCP port" >&2
+                exit 1
+                ;;
+        esac
+        if [ "$relay_port" -eq "$PORT" ]; then
+            echo "buzz-vercel-entrypoint: BUZZ_BIND_ADDR must not use Vercel's public PORT" >&2
+            exit 1
+        fi
     fi
 
     # Vercel defaults PORT to 80. Keep the relay's private listeners on
-    # unprivileged ports, moving one only if the application port collides.
+    # unprivileged ports, moving one if the public or relay port collides.
     health_port=8080
     metrics_port=9102
-    if [ "$PORT" -eq "$health_port" ]; then
+    if [ "$PORT" -eq "$health_port" ] || [ "$relay_port" -eq "$health_port" ]; then
         health_port=8081
     fi
-    if [ "$PORT" -eq "$metrics_port" ]; then
+    if [ "$PORT" -eq "$metrics_port" ] || [ "$relay_port" -eq "$metrics_port" ]; then
         metrics_port=9103
     fi
     if [ "${BUZZ_HEALTH_PORT+x}" != "x" ]; then
@@ -87,6 +103,15 @@ if [ "${VERCEL:-}" = "1" ]; then
     require_nonempty BUZZ_S3_BUCKET
     require_nonempty BUZZ_RELAY_PRIVATE_KEY
     require_nonempty BUZZ_GIT_HOOK_HMAC_SECRET
+
+    # Buzz fails closed while it runs migrations and storage conformance
+    # checks. Bind Vercel's public port immediately, then forward raw HTTP and
+    # WebSocket traffic once the private relay listener becomes available.
+    if [ "${BUZZ_VERCEL_TEST_NO_PROXY:-}" != "1" ]; then
+        socat \
+            "TCP4-LISTEN:$PORT,bind=0.0.0.0,reuseaddr,fork" \
+            "TCP4:127.0.0.1:$relay_port,retry=60,interval=1" &
+    fi
 fi
 
 exec /usr/local/bin/buzz-relay "$@"
