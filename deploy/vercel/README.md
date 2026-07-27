@@ -12,7 +12,8 @@ The deploy flow:
 3. provisions or connects Neon Postgres and Upstash Redis through the Vercel
    Marketplace;
 4. asks for object-storage credentials and two stable Buzz secrets; and
-5. builds the existing root `Dockerfile` as a Vercel container Function.
+5. auto-detects the additive root `Dockerfile.vercel` and builds it as a
+   Vercel container Function.
 
 Neon injects `DATABASE_URL`, while Upstash injects `KV_URL`. A small
 deployment-only entrypoint translates those Marketplace and Vercel variables
@@ -65,9 +66,14 @@ setting, so Vercel support does not require changes to the Rust application.
 - explicit Vercel defaults for `BUZZ_AUTO_MIGRATE`,
   `BUZZ_HUDDLE_AUDIO_AVAILABLE`, `BUZZ_S3_ENDPOINT`, and `BUZZ_S3_REGION`.
 
-The adapter only activates when `VERCEL=1`. Other Docker deployments pass
-straight through to `buzz-relay`, and any explicitly configured canonical
-variable is preserved.
+The Vercel-specific Dockerfile layers this adapter onto a pinned digest of the
+published, multi-architecture `ghcr.io/block/buzz` image. It does not modify or
+duplicate Buzz's production Dockerfile. The adapter only activates when
+`VERCEL=1`; any explicitly configured canonical variable is preserved.
+
+When intentionally upgrading the bundled Buzz version, update the digest in
+[`Dockerfile.vercel`](../../Dockerfile.vercel) after validating the new
+published image.
 
 ## After deployment
 

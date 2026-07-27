@@ -140,7 +140,6 @@ COPY --from=builder    /build/target/release/buzz-admin /usr/local/bin/buzz-admi
 COPY --from=builder    /build/target/release/buzz-pair-relay /usr/local/bin/buzz-pair-relay
 COPY --from=web-builder /build/web/dist                 /srv/buzz/web
 COPY --from=web-builder /build/admin-web/dist           /srv/buzz/admin-web
-COPY --chmod=0755 deploy/vercel/entrypoint.sh            /usr/local/bin/buzz-container-entrypoint
 
 # The invite landing page is always served from the bundled web UI. Repository
 # browser routes require the separate BUZZ_SERVE_GIT_WEB_GUI=true opt-in. The
@@ -157,4 +156,4 @@ RUN mkdir -p /data/git && chown buzz:buzz /data/git
 USER buzz:buzz
 WORKDIR /var/lib/buzz
 
-ENTRYPOINT ["/usr/local/bin/buzz-container-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/buzz-relay"]
