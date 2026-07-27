@@ -18,8 +18,8 @@ if [ "${VERCEL:-}" = "1" ]; then
             exit 1
             ;;
     esac
-    if [ "$PORT" -lt 1024 ] || [ "$PORT" -gt 65535 ]; then
-        echo "buzz-vercel-entrypoint: PORT must be between 1024 and 65535" >&2
+    if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+        echo "buzz-vercel-entrypoint: PORT must be between 1 and 65535" >&2
         exit 1
     fi
 
@@ -27,14 +27,15 @@ if [ "${VERCEL:-}" = "1" ]; then
         export BUZZ_BIND_ADDR="0.0.0.0:$PORT"
     fi
 
-    # The relay also opens private health and metrics listeners. Keep their
-    # defaults from colliding with Vercel's assigned application port.
-    if [ "$PORT" -le 65533 ]; then
-        health_port=$((PORT + 1))
-        metrics_port=$((PORT + 2))
-    else
-        health_port=$((PORT - 1))
-        metrics_port=$((PORT - 2))
+    # Vercel defaults PORT to 80. Keep the relay's private listeners on
+    # unprivileged ports, moving one only if the application port collides.
+    health_port=8080
+    metrics_port=9102
+    if [ "$PORT" -eq "$health_port" ]; then
+        health_port=8081
+    fi
+    if [ "$PORT" -eq "$metrics_port" ]; then
+        metrics_port=9103
     fi
     if [ "${BUZZ_HEALTH_PORT+x}" != "x" ]; then
         export BUZZ_HEALTH_PORT="$health_port"

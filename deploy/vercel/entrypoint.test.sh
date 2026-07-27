@@ -32,7 +32,7 @@ base_output=$(
         VERCEL=1 \
         VERCEL_ENV=preview \
         VERCEL_URL=buzz-preview.vercel.app \
-        PORT=4500 \
+        PORT=80 \
         DATABASE_URL=postgresql://test \
         KV_URL=rediss://marketplace \
         BUZZ_S3_ACCESS_KEY=test-access \
@@ -41,9 +41,9 @@ base_output=$(
         BUZZ_RELAY_PRIVATE_KEY=test-relay-key \
         BUZZ_GIT_HOOK_HMAC_SECRET=test-hook-key
 )
-assert_has "$base_output" "BUZZ_BIND_ADDR=0.0.0.0:4500"
-assert_has "$base_output" "BUZZ_HEALTH_PORT=4501"
-assert_has "$base_output" "BUZZ_METRICS_PORT=4502"
+assert_has "$base_output" "BUZZ_BIND_ADDR=0.0.0.0:80"
+assert_has "$base_output" "BUZZ_HEALTH_PORT=8080"
+assert_has "$base_output" "BUZZ_METRICS_PORT=9102"
 assert_has "$base_output" "REDIS_URL=rediss://marketplace"
 assert_has "$base_output" "RELAY_URL=wss://buzz-preview.vercel.app"
 assert_has "$base_output" "BUZZ_MEDIA_BASE_URL=https://buzz-preview.vercel.app/media"
@@ -51,6 +51,23 @@ assert_has "$base_output" "BUZZ_S3_ENDPOINT=https://t3.storage.dev"
 assert_has "$base_output" "BUZZ_S3_REGION=auto"
 assert_has "$base_output" "BUZZ_AUTO_MIGRATE=true"
 assert_has "$base_output" "BUZZ_HUDDLE_AUDIO_AVAILABLE=false"
+
+collision_output=$(
+    run_entrypoint \
+        VERCEL=1 \
+        VERCEL_URL=buzz-preview.vercel.app \
+        PORT=8080 \
+        DATABASE_URL=postgresql://test \
+        KV_URL=rediss://marketplace \
+        BUZZ_S3_ACCESS_KEY=test-access \
+        BUZZ_S3_SECRET_KEY=test-secret \
+        BUZZ_S3_BUCKET=test-bucket \
+        BUZZ_RELAY_PRIVATE_KEY=test-relay-key \
+        BUZZ_GIT_HOOK_HMAC_SECRET=test-hook-key
+)
+assert_has "$collision_output" "BUZZ_BIND_ADDR=0.0.0.0:8080"
+assert_has "$collision_output" "BUZZ_HEALTH_PORT=8081"
+assert_has "$collision_output" "BUZZ_METRICS_PORT=9102"
 
 override_output=$(
     run_entrypoint \
@@ -101,6 +118,11 @@ if run_entrypoint \
     BUZZ_GIT_HOOK_HMAC_SECRET=test-hook-key \
     >/dev/null 2>&1; then
     echo "entrypoint test: missing Upstash KV_URL should fail" >&2
+    exit 1
+fi
+
+if run_entrypoint VERCEL=1 PORT=0 >/dev/null 2>&1; then
+    echo "entrypoint test: port zero should fail" >&2
     exit 1
 fi
 
